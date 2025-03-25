@@ -81,16 +81,55 @@ def filter_data_for_order(df, start_dt, end_dt, dimensions):
     )
     return df.loc[mask].copy()
 
-def summarize_cbm_and_waste(df):
-    if df.empty:
-        return pd.DataFrame(columns=['Dimension', 'total_cbm', 'waste_cbm', 'waste_percent'])
-    grouped = df.groupby('Dimension').agg(
-        total_cbm=('CBM', 'sum'),
-        waste_cbm=('CBM', lambda x: x[df.loc[x.index, 'Classification'].str.lower() == 'waste'].sum())
+################################################################################
+# Neue Funktion: Summiere CBM je Dimension und Klassifikation
+################################################################################
+def summarize_cbm_by_classifications(df):
+    """
+    Summiert pro 'Dimension' das Gesamtvolumen (total_cbm) sowie die Teilvolumina
+    für jede gewünschte Klassifizierung. Behält zusätzlich waste_percent bei.
+    """
+
+    # Alle gewünschten Klassifizierungen => Spaltennamen
+    CLASSIFICATION_MAP = {
+        "Waste": "waste_cbm",
+        "CE": "ce_cbm",
+        "KH I-III": "kh_i_iii_cbm",
+        "SF I-III": "sf_i_iii_cbm",
+        "SF I-IIII": "sf_i_iiii_cbm",
+        "SI I-II": "si_i_ii_cbm",
+        "IND II-III": "ind_ii_iii_cbm",
+        "NSI I-III": "nsi_i_iii_cbm",
+        "ASS IV": "ass_iv_cbm",
+    }
+
+    # Gruppiere nach Dimension und bilde Summe über CBM
+    grouped = df.groupby('Dimension', dropna=False).agg(
+        total_cbm=('CBM', 'sum')
     ).reset_index()
-    grouped['waste_percent'] = (grouped['waste_cbm'] / grouped['total_cbm'] * 100).round(2)
+
+    # Für jede Klassifizierung eine separate Spalte mit der jeweiligen CBM-Summe
+    for class_label, col_name in CLASSIFICATION_MAP.items():
+        grouped[col_name] = grouped['Dimension'].apply(
+            lambda dim: df.loc[
+                (df['Dimension'] == dim) &
+                (df['Classification'].str.lower() == class_label.lower()),
+                'CBM'
+            ].sum()
+        )
+
+    # waste_percent wie gehabt
+    grouped['waste_percent'] = grouped.apply(
+        lambda row: 100 * row['waste_cbm'] / row['total_cbm'] if row['total_cbm'] else 0,
+        axis=1
+    )
+
+    # Rundung
     grouped['total_cbm'] = grouped['total_cbm'].round(3)
-    grouped['waste_cbm'] = grouped['waste_cbm'].round(3)
+    for col_name in CLASSIFICATION_MAP.values():
+        grouped[col_name] = grouped[col_name].round(3)
+    grouped['waste_percent'] = grouped['waste_percent'].round(2)
+
     return grouped
 
 # Klassifizierungs-Listen (HW/SW/KH) + classify_dimension
@@ -232,7 +271,6 @@ def extract_table_with_suborders_clean(file_input, start_keyword="Auftrag"):
                     result_rows.append(full_row)
     return pd.DataFrame(result_rows)
 
-
 ################################################################################
 # 3) Haupt-App: Zwei Buttons (Schritt 5 & Schritt 6)
 ################################################################################
@@ -357,14 +395,25 @@ def main_app():
             (start_dt, end_dt) = params["time_window"]
             dims = params["dimensions"]
             df_filtered = filter_data_for_order(df_microtec, start_dt, end_dt, dims)
-            result = summarize_cbm_and_waste(df_filtered)
+
+            # NEU: Summiere alle Klassifikationen
+            result = summarize_cbm_by_classifications(df_filtered)
+
             vol_in = auftrag_infos[ukey]["vol_eingang"]
 
             for _, row_ in result.iterrows():
-                dim        = row_["Dimension"]
-                brutto_vol = row_["total_cbm"]
-                waste_vol  = row_["waste_cbm"]
-                waste_pct  = row_["waste_percent"]
+                dim         = row_["Dimension"]
+                brutto_vol  = row_["total_cbm"]
+                waste_vol   = row_["waste_cbm"]
+                ce          = row_["ce_cbm"]
+                kh_i_iii     = row_["kh_i_iii_cbm"]
+                sf_i_iii    = row_["sf_i_iii_cbm"]
+                sf_i_iiii   = row_["sf_i_iiii_cbm"]
+                si_i_ii     = row_["si_i_ii_cbm"]
+                ind_ii_iii  = row_["ind_ii_iii_cbm"]
+                nsi_i_iii   = row_["nsi_i_iii_cbm"]
+                ass_iv      = row_["ass_iv_cbm"]
+                waste_pct   = row_["waste_percent"]
 
                 netto_vol  = brutto_vol - waste_vol
                 brutto_ausb = compute_yield(brutto_vol, vol_in)
@@ -374,6 +423,7 @@ def main_app():
                 final_rows.append({
                     "unique_key": ukey,
                     "unterkategorie": dim,
+                    # Bisherige Werte
                     "Brutto_Volumen": brutto_vol,
                     "waste_cbm": waste_vol,
                     "Netto_Volumen": netto_vol,
@@ -381,7 +431,16 @@ def main_app():
                     "Netto_Ausbeute": netto_ausb,
                     "Vol_Eingang_m3": vol_in / 1000,
                     "Brutto_Ausschuss": waste_pct,
-                    "Warentyp": wtyp
+                    "Warentyp": wtyp,
+                    # NEUE Klassifikations-Spalten
+                    "ce_cbm": ce,
+                    "kh_i_iii_cbm": kh_i_iii,
+                    "sf_i_iii_cbm": sf_i_iii,
+                    "sf_i_iiii_cbm": sf_i_iiii,
+                    "si_i_ii_cbm": si_i_ii,
+                    "ind_ii_iii_cbm": ind_ii_iii,
+                    "nsi_i_iii_cbm": nsi_i_iii,
+                    "ass_iv_cbm": ass_iv,
                 })
 
         microtec_df = pd.DataFrame(final_rows)
@@ -415,7 +474,17 @@ def main_app():
                 row_dict["Vol_Eingang_m3"]   = rowM["Vol_Eingang_m3"]
                 row_dict["Brutto_Ausschuss"] = rowM["Brutto_Ausschuss"]
                 row_dict["Warentyp"]         = rowM["Warentyp"]
+                # NEUE Klassifikationen übernehmen
+                row_dict["ce_cbm"]           = rowM["ce_cbm"]
+                row_dict["kh_i_iii_cbm"]      = rowM["kh_i_iii_cbm"]
+                row_dict["sf_i_iii_cbm"]     = rowM["sf_i_iii_cbm"]
+                row_dict["sf_i_iiii_cbm"]    = rowM["sf_i_iiii_cbm"]
+                row_dict["si_i_ii_cbm"]      = rowM["si_i_ii_cbm"]
+                row_dict["ind_ii_iii_cbm"]   = rowM["ind_ii_iii_cbm"]
+                row_dict["nsi_i_iii_cbm"]    = rowM["nsi_i_iii_cbm"]
+                row_dict["ass_iv_cbm"]       = rowM["ass_iv_cbm"]
             else:
+                # Keine passenden MicroTec-Daten gefunden => 0
                 row_dict["Brutto_Volumen"]   = 0
                 row_dict["waste_cbm"]        = 0
                 row_dict["Netto_Volumen"]    = 0
@@ -424,6 +493,15 @@ def main_app():
                 row_dict["Vol_Eingang_m3"]   = 0
                 row_dict["Brutto_Ausschuss"] = 0
                 row_dict["Warentyp"]         = ""
+                # NEUE Klassifikationen => 0
+                row_dict["ce_cbm"]           = 0 
+                row_dict["kh_i_iii_cbm"]     = 0 
+                row_dict["sf_i_iii_cbm"]     = 0 
+                row_dict["sf_i_iiii_cbm"]    = 0   
+                row_dict["si_i_ii_cbm"]      = 0
+                row_dict["ind_ii_iii_cbm"]   = 0
+                row_dict["nsi_i_iii_cbm"]    = 0
+                row_dict["ass_iv_cbm"]       = 0
 
             merged_rows.append(row_dict)
 
@@ -444,14 +522,18 @@ def main_app():
 
         numeric_cols = [
             "stämme","vol_eingang","durchschn_stammlänge","teile","vol_ausgang",
-            "Brutto_Volumen","waste_cbm","Netto_Volumen","Brutto_Ausbeute",
-            "Netto_Ausbeute","Vol_Eingang_m3","Brutto_Ausschuss"
+            "Brutto_Volumen","Brutto_Ausschuss","Netto_Volumen","Brutto_Ausbeute",
+            "Netto_Ausbeute","Vol_Eingang_m3",
+            # NEUE Klassifikationen
+            "ce_cbm","kh_i_iii_cbm","sf_i_iii_cbm","sf_i_iiii_cbm",
+            "si_i_ii_cbm","ind_ii_iii_cbm","nsi_i_iii_cbm","ass_iv_cbm","waste_cbm"
         ]
         for c in numeric_cols:
             if c not in df_agg.columns:
                 df_agg[c] = 0
             df_agg[c] = pd.to_numeric(df_agg[c], errors="coerce")
 
+        # Aggregationsregeln => neue Klassifikations-Spalten werden aufsummiert
         agg_dict = {
             "stämme": "sum",
             "vol_eingang": "sum",
@@ -459,13 +541,22 @@ def main_app():
             "teile": "sum",
             "vol_ausgang": "sum",
             "Brutto_Volumen": "sum",
-            "waste_cbm": "sum",
+            "Brutto_Ausschuss": "mean",
             "Netto_Volumen": "sum",
             "Vol_Eingang_m3": "sum",
             "Brutto_Ausbeute": "mean",
             "Netto_Ausbeute": "mean",
-            "Brutto_Ausschuss": "mean",
-            "Warentyp": "first"
+            "Warentyp": "first",
+            # Neue Klassifikationen
+            "ce_cbm": "sum",
+            "kh_i_iii_cbm": "sum",
+            "sf_i_iii_cbm": "sum",
+            "sf_i_iiii_cbm": "sum",
+            "si_i_ii_cbm": "sum",
+            "ind_ii_iii_cbm": "sum",
+            "nsi_i_iii_cbm": "sum",
+            "ass_iv_cbm": "sum",
+            "waste_cbm": "sum"
         }
 
         grouped = (
@@ -474,6 +565,7 @@ def main_app():
             .agg(agg_dict)
         )
 
+        # Bisherige Logik => Brutto_Ausschuss neu berechnen
         grouped["Brutto_Ausschuss"] = grouped.apply(
             lambda r: 100 * (r["waste_cbm"] / r["Brutto_Volumen"]) if r["Brutto_Volumen"] > 0 else 0,
             axis=1
@@ -489,12 +581,25 @@ def main_app():
         grouped["Brutto_Ausbeute"] = grouped.apply(lambda r: compute_ausbeute(r, "Brutto_Volumen"), axis=1)
         grouped["Netto_Ausbeute"]  = grouped.apply(lambda r: compute_ausbeute(r, "Netto_Volumen"), axis=1)
 
+        # ---------------------------------------------------------------------
+        # KH I-III + SF I-III + SF I-IIII => sf_cbm
+        # ---------------------------------------------------------------------
+        grouped["sf_cbm"] = grouped["kh_i_iii_cbm"] + grouped["sf_i_iii_cbm"] + grouped["sf_i_iiii_cbm"]
+
+        # Anschließend entfernen wir die Einzelspalten (wenn sie im finalen Output
+        # nicht mehr benötigt werden):
+        grouped.drop(["kh_i_iii_cbm", "sf_i_iii_cbm", "sf_i_iiii_cbm"], axis=1, inplace=True)
+
+        # Spalten in gewünschter Reihenfolge
         final_cols = [
             "auftrag","unterkategorie","stämme","vol_eingang","durchschn_stammlänge",
             "teile","vol_ausgang","Warentyp","Brutto_Volumen","Brutto_Ausschuss",
-            "Netto_Volumen","Brutto_Ausbeute","Netto_Ausbeute"
-            #,"Vol_Eingang_m3"
+            "Netto_Volumen","Brutto_Ausbeute","Netto_Ausbeute",
+            # Noch vorhandene Klassifikations-Spalten
+            "ce_cbm","sf_cbm","si_i_ii_cbm","ind_ii_iii_cbm","nsi_i_iii_cbm","ass_iv_cbm","waste_cbm",            
         ]
+
+        # Falls eine Spalte fehlt, setze sie auf 0
         for col in final_cols:
             if col not in grouped.columns:
                 grouped[col] = 0
