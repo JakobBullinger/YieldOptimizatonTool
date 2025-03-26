@@ -533,7 +533,7 @@ def main_app():
             "si_cbm": "SI",
             "ind_ii_iii_cbm": "IND",
             "nsi_i_iii_cbm": "NSI",
-            "ass_iv_cbm": "Q",
+            "ass_iv_cbm": "Q_V",
             "waste_cbm": "Ausschuss"
         }
         grouped.rename(columns=rename_map, inplace=True)
