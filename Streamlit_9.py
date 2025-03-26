@@ -101,7 +101,7 @@ def summarize_cbm_by_classifications(df):
         "SI 0-IV": "si_0_iv_cbm",
         "SI I-II": "si_i_ii_cbm",
         "IND II-III": "ind_ii_iii_cbm",
-        "NSI I-III": "nsi_i_iii_cbm",
+        " NSI I-III": "nsi_i_iii_cbm",
         "ASS IV": "ass_iv_cbm",
     }
 
@@ -140,6 +140,7 @@ HW_DIMENSIONS = {
     "43x95","43x138","43x125","43x141","47x92","47x113",
     "47x153","47x154","47x175","47x198","51x104","36x134",
     "48x117","48x128","48x144","48x164","69x122","75x148","75x152",
+    "45x129"
 }
 SW_DIMENSIONS = {
     "17x75","17x78","17x98","17x100","23x103","26x146","28x131","28x149","35x155"
