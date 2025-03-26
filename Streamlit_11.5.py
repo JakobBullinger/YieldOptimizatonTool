@@ -15,7 +15,7 @@ if "merged_df" not in st.session_state:
 # 2) Hilfsfunktionen: Synonym, CSV-Funktionen, PDF-Parsing
 ################################################################################
 
-### Feisto: MicroTec Übersetzung
+### Feisto : MicroTec Übersetzung
 
 synonyms = {
     "38x80": "80x80",
@@ -89,17 +89,16 @@ def filter_data_for_order(df, start_dt, end_dt, dimensions):
 def summarize_cbm_by_classifications(df):
     """
     Summiert pro 'Dimension' das Gesamtvolumen (total_cbm) sowie die Teilvolumina
-    für jede gewünschte Klassifizierung. Zusätzlich wird der Anteil für 'Waste'
-    als Prozentwert (waste_percent) berechnet. 
+    für jede gewünschte Klassifizierung. Behält zusätzlich waste_percent bei.
     """
-    # Alle gewünschten Klassifizierungen, inkl. der neuen "SI 0-IV"
+    # Alle gewünschten Klassifizierungen => Spaltennamen (inklusive neuer "SI 0-IV")
     CLASSIFICATION_MAP = {
         "Waste": "waste_cbm",
         "CE": "ce_cbm",
         "KH I-III": "kh_i_iii_cbm",
         "SF I-III": "sf_i_iii_cbm",
         "SF I-IV": "sf_i_iiii_cbm",
-        "SI 0-IV": "si_0_iv_cbm",
+        "SI 0-IV": "si_0_iv_cbm",  # NEU
         "SI I-II": "si_i_ii_cbm",
         "IND II-III": "ind_ii_iii_cbm",
         "NSI I-III": "nsi_i_iii_cbm",
@@ -131,9 +130,7 @@ def summarize_cbm_by_classifications(df):
 
     return grouped
 
-# Da wir den gesamten Teil zur Klassifizierung der Dimensionen (KH, HW, SW) nicht mehr benötigen,
-# entfernen wir alle Funktionen und Listen, die damit zusammenhängen – also auch die Funktion
-# "classify_dimension" und entsprechende Referenzen im Code (z.B. Warentyp wird nicht mehr berechnet).
+# Der gesamte Teil zur Klassifizierung der Dimensionen in KH, HW, SW wurde entfernt.
 
 # PDF-Parsing
 def extract_table_with_suborders_clean(file_input, start_keyword="Auftrag"):
@@ -246,7 +243,7 @@ def extract_table_with_suborders_clean(file_input, start_keyword="Auftrag"):
     return pd.DataFrame(result_rows)
 
 ################################################################################
-# 3) Haupt-App: Nicht aggregiertes Ergebnis (Schritt 5) und Aggregiertes Ergebnis (Schritt 6)
+# 3) Haupt-App: Finales Ergebnis (Direkt aggregiert, ohne separaten Zwischenschritt)
 ################################################################################
 def main_app():
     st.title("Gelo Ausbeuteanalyse")
@@ -336,10 +333,10 @@ def main_app():
         return (volume / (vol_in_liters / 1000)) * 100
 
     # -------------------------------------------------------------------------
-    # BUTTON (A): Nicht aggregiertes Ergebnis (Schritt 5)
+    # BUTTON: Auswerten & Aggregieren (Direkt zum finalen Output)
     # -------------------------------------------------------------------------
-    if st.button("Auswerten & Zusammenführen (ohne Aggregation)"):
-        final_rows = []
+    if st.button("Auswerten & Aggregieren"):
+        all_rows = []
         for ukey, params in orders_final.items():
             (start_dt, end_dt) = params["time_window"]
             dims = params["dimensions"]
@@ -363,7 +360,8 @@ def main_app():
                 netto_vol = brutto_vol - waste_vol
                 brutto_ausb = compute_yield(brutto_vol, vol_in)
                 netto_ausb = compute_yield(netto_vol, vol_in)
-                final_rows.append({
+                # Ohne Dimensionseinstufung: Warentyp wird nicht berechnet
+                all_rows.append({
                     "unique_key": ukey,
                     "unterkategorie": dim,
                     "Brutto_Volumen": brutto_vol,
@@ -383,9 +381,7 @@ def main_app():
                     "nsi_i_iii_cbm": nsi_i_iii,
                     "ass_iv_cbm": ass_iv,
                 })
-        microtec_df = pd.DataFrame(final_rows)
-        st.subheader("Nicht aggregiertes Ergebnis (PDF + MicroTec)")
-        st.dataframe(microtec_df)
+        microtec_df = pd.DataFrame(all_rows)
 
         # Merge mit PDF-Daten
         df_prod["unterkategorie"] = df_prod["unterkategorie"].apply(normalize_dimension).apply(unify_dimension)
@@ -439,16 +435,11 @@ def main_app():
             merged_rows.append(row_dict)
         merged_df = pd.DataFrame(merged_rows)
         st.session_state["merged_df"] = merged_df
+        st.subheader("Nicht aggregiertes Endergebnis (PDF + MicroTec)")
+        st.dataframe(merged_df)
 
-    # -------------------------------------------------------------------------
-    # BUTTON (B): Aggregieren & Kennzahlen neu berechnen (Schritt 6)
-    # -------------------------------------------------------------------------
-    if st.button("Aggregieren & Kennzahlen neu"):
-        if st.session_state["merged_df"] is None:
-            st.error("Bitte erst 'Auswerten & Zusammenführen' klicken!")
-            st.stop()
-
-        df_agg = st.session_state["merged_df"].copy()
+        # Aggregationsschritt
+        df_agg = merged_df.copy()
         numeric_cols = [
             "stämme", "vol_eingang", "durchschn_stammlänge", "teile", "vol_ausgang",
             "Brutto_Volumen", "Brutto_Ausschuss", "Netto_Volumen", "Brutto_Ausbeute",
@@ -515,7 +506,9 @@ def main_app():
             if col not in grouped.columns:
                 grouped[col] = 0
         grouped = grouped[final_cols]
+        # -----------------------------
         # Spalten-Umbennung im finalen Output
+        # -----------------------------
         rename_map = {
             "auftrag": "Auftrag",
             "unterkategorie": "Dimension",
