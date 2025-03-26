@@ -23,7 +23,7 @@ synonyms = {
     "17x98": "17x100",
     "17x95": "17x100",
     "23x100": "23x103",
-    "47x220": "47x221"
+    "47x220": "47x223"
 }
 
 def unify_dimension(dim_str):
@@ -90,7 +90,7 @@ def summarize_cbm_by_classifications(df):
     """
     Summiert pro 'Dimension' das Gesamtvolumen (total_cbm) sowie die Teilvolumina
     für jede gewünschte Klassifizierung. Zusätzlich wird der Anteil für 'Waste'
-    als Prozentwert (waste_percent) berechnet. 
+    als Prozentwert (waste_percent) berechnet.
     """
     # Alle gewünschten Klassifizierungen, inkl. der neuen "SI 0-IV"
     CLASSIFICATION_MAP = {
@@ -132,8 +132,7 @@ def summarize_cbm_by_classifications(df):
     return grouped
 
 # Da wir den gesamten Teil zur Klassifizierung der Dimensionen (KH, HW, SW) nicht mehr benötigen,
-# entfernen wir alle Funktionen und Listen, die damit zusammenhängen – also auch die Funktion
-# "classify_dimension" und entsprechende Referenzen im Code (z.B. Warentyp wird nicht mehr berechnet).
+# wurde der entsprechende Code entfernt.
 
 # PDF-Parsing
 def extract_table_with_suborders_clean(file_input, start_keyword="Auftrag"):
@@ -538,6 +537,16 @@ def main_app():
             "waste_cbm": "Ausschuss"
         }
         grouped.rename(columns=rename_map, inplace=True)
+
+        # Final: Transformation der Dimensionen gemäß Wunsch
+        final_dimension_map = {
+            "17x100": "17x98",
+            "23x103": "23x100",
+            "47x221": "47x220",
+            "47x223": "47x220"
+        }
+        grouped["Dimension"] = grouped["Dimension"].replace(final_dimension_map)
+
         st.subheader("Aggregiertes Ergebnis")
         st.dataframe(grouped)
         xlsx_data = to_excel_bytes(grouped)
