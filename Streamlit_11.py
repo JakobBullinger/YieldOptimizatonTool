@@ -16,6 +16,7 @@ if "merged_df" not in st.session_state:
 ################################################################################
 
 ### Feisto : MicroTec Übersetzung
+
 synonyms = {
     "38x80": "80x80",
     "17x75": "17x78",
@@ -90,15 +91,14 @@ def summarize_cbm_by_classifications(df):
     Summiert pro 'Dimension' das Gesamtvolumen (total_cbm) sowie die Teilvolumina
     für jede gewünschte Klassifizierung. Behält zusätzlich waste_percent bei.
     """
-
-    # Alle gewünschten Klassifizierungen => Spaltennamen
+    # Alle gewünschten Klassifizierungen => Spaltennamen (inklusive neuer "SI 0-IV")
     CLASSIFICATION_MAP = {
         "Waste": "waste_cbm",
         "CE": "ce_cbm",
         "KH I-III": "kh_i_iii_cbm",
         "SF I-III": "sf_i_iii_cbm",
         "SF I-IV": "sf_i_iiii_cbm",
-        "SI 0-IV": "si_0_iv_cbm",
+        "SI 0-IV": "si_0_iv_cbm",  # NEU
         "SI I-II": "si_i_ii_cbm",
         "IND II-III": "ind_ii_iii_cbm",
         "NSI I-III": "nsi_i_iii_cbm",
@@ -274,7 +274,7 @@ def extract_table_with_suborders_clean(file_input, start_keyword="Auftrag"):
     return pd.DataFrame(result_rows)
 
 ################################################################################
-# 3) Haupt-App: Zwei Buttons (Schritt 5 & Schritt 6)
+# 3) Haupt-App: Aggregiertes Ergebnis (ohne separaten Schritt 5)
 ################################################################################
 def main_app():
     st.title("Gelo Ausbeuteanalyse")
@@ -296,42 +296,39 @@ def main_app():
             st.dataframe(df_prod)
 
             # Numeric cast für relevante Spalten
-            numeric_cols = ["stämme","vol_eingang","durchschn_stammlänge","teile","vol_ausgang"]
+            numeric_cols = ["stämme", "vol_eingang", "durchschn_stammlänge", "teile", "vol_ausgang"]
             for c in numeric_cols:
                 df_prod[c] = pd.to_numeric(
-                    df_prod[c].astype(str).str.replace(",",".").str.strip(),
+                    df_prod[c].astype(str).str.replace(",", ".").str.strip(),
                     errors="coerce"
                 )
 
             # unique_key nur für Hauptzeilen (unterkategorie == "")
             df_prod["unique_key"] = None
             df_main = df_prod[df_prod["unterkategorie"] == ""]  # kein reset_index!
-            
             # Jede Hauptzeile bekommt einen eigenen unique_key basierend auf dem Original-Index
             for i, row in df_main.iterrows():
                 order_text = row["auftrag"]
                 ukey = f"{order_text}_{i}"  # Auftragstext + Original-Index
                 df_prod.at[i, "unique_key"] = ukey
-
-            # Forward-Fill => Unterzeilen (unterkategorie != "") bekommen denselben unique_key
+            # Forward-Fill => Unterzeilen erhalten denselben unique_key
             df_prod["unique_key"] = df_prod["unique_key"].ffill()
 
             # Dictionary bauen: für jede Hauptzeile
             for i, row_ in df_main.iterrows():
                 ukey = df_prod.at[i, "unique_key"]
                 group = df_prod[df_prod["unique_key"] == ukey]
-                dims  = group["unterkategorie"].unique().tolist()
-                dims  = [d for d in dims if d]
-                dims  = [unify_dimension(normalize_dimension(d)) for d in dims]
+                dims = group["unterkategorie"].unique().tolist()
+                dims = [d for d in dims if d]
+                dims = [unify_dimension(normalize_dimension(d)) for d in dims]
 
                 vol_in = 0.0
                 main_line = group[group["unterkategorie"] == ""]
                 if not main_line.empty:
                     vol_in_val = main_line.iloc[0]["vol_eingang"]
                     vol_in = parse_vol_eingang(vol_in_val)
-
                 orders_from_pdf[ukey] = {"dimensions": dims, "auftrag": row_["auftrag"]}
-                auftrag_infos[ukey]   = {"vol_eingang": vol_in}
+                auftrag_infos[ukey] = {"vol_eingang": vol_in}
 
     # -------------------------------------------------------------------------
     # CSV-Upload
@@ -347,9 +344,7 @@ def main_app():
             st.subheader("MicroTec CSV Daten")
             st.dataframe(df_microtec.head())
 
-    if not orders_from_pdf:
-        st.stop()
-    if df_microtec is None:
+    if not orders_from_pdf or df_microtec is None:
         st.stop()
 
     # -------------------------------------------------------------------------
@@ -358,15 +353,10 @@ def main_app():
     default_date = df_microtec["Datetime"].iloc[0].date()
     st.markdown("### 3) Zeitfenster definieren")
     orders_final = {}
-    
-    # Gruppiere unique_keys nach 5-stelliger Auftragsnummer
     order_instances = {}
     for ukey, info in orders_from_pdf.items():
-        # Annahme: Die 5-stellige Nummer ist der erste Token des Auftragstextes
         order_number = info["auftrag"].split()[0]
         order_instances.setdefault(order_number, []).append(ukey)
-    
-    # Für jeden Auftrag und jede Instanz eine eigene Zeiteingabe
     for order_number, ukey_list in order_instances.items():
         for idx, ukey in enumerate(ukey_list):
             st.markdown(f"#### Auftrag {order_number} – Instanz {idx+1} von {len(ukey_list)}")
@@ -376,7 +366,7 @@ def main_app():
             eh = c2.number_input(f"End-Stunde {ukey}", 0, 23, 12, 1)
             em = c2.number_input(f"End-Minute {ukey}", 0, 59, 0, 1)
             start_dt = datetime.combine(default_date, time(sh, sm))
-            end_dt   = datetime.combine(default_date, time(eh, em))
+            end_dt = datetime.combine(default_date, time(eh, em))
             orders_final[ukey] = {
                 "time_window": (start_dt, end_dt),
                 "dimensions": orders_from_pdf[ukey]["dimensions"]
@@ -389,44 +379,40 @@ def main_app():
         return (volume / (vol_in_liters / 1000)) * 100
 
     # -------------------------------------------------------------------------
-    # BUTTON (A): Auswerten & Zusammenführen (nicht aggregiert)
+    # BUTTON: Auswerten & Aggregieren (Direkt zum finalen Output)
     # -------------------------------------------------------------------------
-    if st.button("MicroTec & Feisto: Auswerten & Zusammenführung (ohne Aggregation)"):
-        final_rows = []
+    if st.button("Auswerten & Aggregieren"):
+        all_rows = []
+        # Für jeden Auftrag filtern und Klassifizierungen summieren (wie früher Schritt 5 intern)
         for ukey, params in orders_final.items():
             (start_dt, end_dt) = params["time_window"]
             dims = params["dimensions"]
             df_filtered = filter_data_for_order(df_microtec, start_dt, end_dt, dims)
-
-            # NEU: Summiere alle Klassifikationen
             result = summarize_cbm_by_classifications(df_filtered)
-
             vol_in = auftrag_infos[ukey]["vol_eingang"]
-
             for _, row_ in result.iterrows():
-                dim         = row_["Dimension"]
-                brutto_vol  = row_["total_cbm"]
-                waste_vol   = row_["waste_cbm"]
-                ce          = row_["ce_cbm"]
-                kh_i_iii    = row_["kh_i_iii_cbm"]
-                sf_i_iii    = row_["sf_i_iii_cbm"]
-                sf_i_iiii   = row_["sf_i_iiii_cbm"]
-                si_0_iv     = row_["si_0_iv_cbm"]
-                si_i_ii     = row_["si_i_ii_cbm"]
-                ind_ii_iii  = row_["ind_ii_iii_cbm"]
-                nsi_i_iii   = row_["nsi_i_iii_cbm"]
-                ass_iv      = row_["ass_iv_cbm"]
-                waste_pct   = row_["waste_percent"]
+                dim = row_["Dimension"]
+                brutto_vol = row_["total_cbm"]
+                waste_vol = row_["waste_cbm"]
+                ce = row_["ce_cbm"]
+                kh_i_iii = row_["kh_i_iii_cbm"]
+                sf_i_iii = row_["sf_i_iii_cbm"]
+                sf_i_iiii = row_["sf_i_iiii_cbm"]
+                si_0_iv = row_["si_0_iv_cbm"]
+                si_i_ii = row_["si_i_ii_cbm"]
+                ind_ii_iii = row_["ind_ii_iii_cbm"]
+                nsi_i_iii = row_["nsi_i_iii_cbm"]
+                ass_iv = row_["ass_iv_cbm"]
+                waste_pct = row_["waste_percent"]
 
-                netto_vol  = brutto_vol - waste_vol
+                netto_vol = brutto_vol - waste_vol
                 brutto_ausb = compute_yield(brutto_vol, vol_in)
-                netto_ausb  = compute_yield(netto_vol, vol_in)
-                wtyp        = classify_dimension(dim)
+                netto_ausb = compute_yield(netto_vol, vol_in)
+                wtyp = classify_dimension(dim)
 
-                final_rows.append({
+                all_rows.append({
                     "unique_key": ukey,
                     "unterkategorie": dim,
-                    # Bisherige Werte
                     "Brutto_Volumen": brutto_vol,
                     "waste_cbm": waste_vol,
                     "Netto_Volumen": netto_vol,
@@ -435,7 +421,6 @@ def main_app():
                     "Vol_Eingang_m3": vol_in / 1000,
                     "Brutto_Ausschuss": waste_pct,
                     "Warentyp": wtyp,
-                    # NEUE Klassifikations-Spalten
                     "ce_cbm": ce,
                     "kh_i_iii_cbm": kh_i_iii,
                     "sf_i_iii_cbm": sf_i_iii,
@@ -446,91 +431,68 @@ def main_app():
                     "nsi_i_iii_cbm": nsi_i_iii,
                     "ass_iv_cbm": ass_iv,
                 })
+        microtec_df = pd.DataFrame(all_rows)
 
-        microtec_df = pd.DataFrame(final_rows)
-        st.subheader("MicroTec-Ergebnis (nicht aggregiert)")
-        st.dataframe(microtec_df)
-
-        # Merge mit df_prod: Vereinheitliche die Unterkategorie in den PDF-Daten
+        # Merge mit PDF-Daten
         df_prod["unterkategorie"] = df_prod["unterkategorie"].apply(normalize_dimension).apply(unify_dimension)
-
         merged_rows = []
         for _, pdfrow in df_prod.iterrows():
             ukey = pdfrow["unique_key"]
             ukat = pdfrow["unterkategorie"]
             row_dict = pdfrow.to_dict()
-
             if ukey is not None:
                 match = microtec_df.loc[
-                    (microtec_df["unique_key"] == ukey) & 
+                    (microtec_df["unique_key"] == ukey) &
                     (microtec_df["unterkategorie"] == ukat)
                 ]
             else:
                 match = pd.DataFrame()
-
             if not match.empty:
                 rowM = match.iloc[0]
-                row_dict["Brutto_Volumen"]   = rowM["Brutto_Volumen"]
-                row_dict["waste_cbm"]        = rowM["waste_cbm"]
-                row_dict["Netto_Volumen"]    = rowM["Netto_Volumen"]
-                row_dict["Brutto_Ausbeute"]  = rowM["Brutto_Ausbeute"]
-                row_dict["Netto_Ausbeute"]   = rowM["Netto_Ausbeute"]
-                row_dict["Vol_Eingang_m3"]   = rowM["Vol_Eingang_m3"]
+                row_dict["Brutto_Volumen"] = rowM["Brutto_Volumen"]
+                row_dict["waste_cbm"] = rowM["waste_cbm"]
+                row_dict["Netto_Volumen"] = rowM["Netto_Volumen"]
+                row_dict["Brutto_Ausbeute"] = rowM["Brutto_Ausbeute"]
+                row_dict["Netto_Ausbeute"] = rowM["Netto_Ausbeute"]
+                row_dict["Vol_Eingang_m3"] = rowM["Vol_Eingang_m3"]
                 row_dict["Brutto_Ausschuss"] = rowM["Brutto_Ausschuss"]
-                row_dict["Warentyp"]         = rowM["Warentyp"]
-                # NEUE Klassifikationen übernehmen
-                row_dict["ce_cbm"]           = rowM["ce_cbm"]
-                row_dict["kh_i_iii_cbm"]     = rowM["kh_i_iii_cbm"]
-                row_dict["sf_i_iii_cbm"]     = rowM["sf_i_iii_cbm"]
-                row_dict["sf_i_iiii_cbm"]    = rowM["sf_i_iiii_cbm"]
-                row_dict["si_0_iv_cbm"]      = rowM["si_0_iv_cbm"]
-                row_dict["si_i_ii_cbm"]      = rowM["si_i_ii_cbm"]
-                row_dict["ind_ii_iii_cbm"]   = rowM["ind_ii_iii_cbm"]
-                row_dict["nsi_i_iii_cbm"]    = rowM["nsi_i_iii_cbm"]
-                row_dict["ass_iv_cbm"]       = rowM["ass_iv_cbm"]
+                row_dict["Warentyp"] = rowM["Warentyp"]
+                row_dict["ce_cbm"] = rowM["ce_cbm"]
+                row_dict["kh_i_iii_cbm"] = rowM["kh_i_iii_cbm"]
+                row_dict["sf_i_iii_cbm"] = rowM["sf_i_iii_cbm"]
+                row_dict["sf_i_iiii_cbm"] = rowM["sf_i_iiii_cbm"]
+                row_dict["si_0_iv_cbm"] = rowM["si_0_iv_cbm"]
+                row_dict["si_i_ii_cbm"] = rowM["si_i_ii_cbm"]
+                row_dict["ind_ii_iii_cbm"] = rowM["ind_ii_iii_cbm"]
+                row_dict["nsi_i_iii_cbm"] = rowM["nsi_i_iii_cbm"]
+                row_dict["ass_iv_cbm"] = rowM["ass_iv_cbm"]
             else:
-                # Keine passenden MicroTec-Daten => 0
-                row_dict["Brutto_Volumen"]   = 0
-                row_dict["waste_cbm"]        = 0
-                row_dict["Netto_Volumen"]    = 0
-                row_dict["Brutto_Ausbeute"]  = 0
-                row_dict["Netto_Ausbeute"]   = 0
-                row_dict["Vol_Eingang_m3"]   = 0
+                row_dict["Brutto_Volumen"] = 0
+                row_dict["waste_cbm"] = 0
+                row_dict["Netto_Volumen"] = 0
+                row_dict["Brutto_Ausbeute"] = 0
+                row_dict["Netto_Ausbeute"] = 0
+                row_dict["Vol_Eingang_m3"] = 0
                 row_dict["Brutto_Ausschuss"] = 0
-                row_dict["Warentyp"]         = ""
-                # NEUE Klassifikationen => 0
-                row_dict["ce_cbm"]           = 0 
-                row_dict["kh_i_iii_cbm"]     = 0 
-                row_dict["sf_i_iii_cbm"]     = 0 
-                row_dict["sf_i_iiii_cbm"]    = 0
-                row_dict["si_0_iv_cbm"]      = 0
-                row_dict["si_i_ii_cbm"]      = 0
-                row_dict["ind_ii_iii_cbm"]   = 0
-                row_dict["nsi_i_iii_cbm"]    = 0
-                row_dict["ass_iv_cbm"]       = 0
-
+                row_dict["Warentyp"] = ""
+                row_dict["ce_cbm"] = 0
+                row_dict["kh_i_iii_cbm"] = 0
+                row_dict["sf_i_iii_cbm"] = 0
+                row_dict["sf_i_iiii_cbm"] = 0
+                row_dict["si_0_iv_cbm"] = 0
+                row_dict["si_i_ii_cbm"] = 0
+                row_dict["ind_ii_iii_cbm"] = 0
+                row_dict["nsi_i_iii_cbm"] = 0
+                row_dict["ass_iv_cbm"] = 0
             merged_rows.append(row_dict)
-
         merged_df = pd.DataFrame(merged_rows)
-        st.session_state["merged_df"] = merged_df
-        st.subheader("Nicht aggregiertes Endergebnis (PDF + MicroTec)")
-        st.dataframe(merged_df)
 
-    # -------------------------------------------------------------------------
-    # BUTTON (B): Aggregieren & Kennzahlen neu berechnen
-    # -------------------------------------------------------------------------
-    if st.button("Aggregieren & Kennzahlen neu"):
-        if st.session_state["merged_df"] is None:
-            st.error("Bitte erst 'Auswerten & Zusammenführen' klicken!")
-            st.stop()
-
-        df_agg = st.session_state["merged_df"].copy()
-
+        # Aggregation (früher Schritt 6)
+        df_agg = merged_df.copy()
         numeric_cols = [
             "stämme","vol_eingang","durchschn_stammlänge","teile","vol_ausgang",
             "Brutto_Volumen","Brutto_Ausschuss","Netto_Volumen","Brutto_Ausbeute",
             "Netto_Ausbeute","Vol_Eingang_m3",
-            # NEUE Klassifikationen
             "ce_cbm","kh_i_iii_cbm","sf_i_iii_cbm","sf_i_iiii_cbm",
             "si_0_iv_cbm","si_i_ii_cbm","ind_ii_iii_cbm","nsi_i_iii_cbm","ass_iv_cbm","waste_cbm"
         ]
@@ -538,8 +500,6 @@ def main_app():
             if c not in df_agg.columns:
                 df_agg[c] = 0
             df_agg[c] = pd.to_numeric(df_agg[c], errors="coerce")
-
-        # Aggregationsregeln => neue Klassifikations-Spalten werden aufsummiert
         agg_dict = {
             "stämme": "sum",
             "vol_eingang": "sum",
@@ -553,7 +513,6 @@ def main_app():
             "Brutto_Ausbeute": "mean",
             "Netto_Ausbeute": "mean",
             "Warentyp": "first",
-            # Neue Klassifikationen
             "ce_cbm": "sum",
             "kh_i_iii_cbm": "sum",
             "sf_i_iii_cbm": "sum",
@@ -565,58 +524,36 @@ def main_app():
             "ass_iv_cbm": "sum",
             "waste_cbm": "sum"
         }
-
-        grouped = (
-            df_agg
-            .groupby(["auftrag","unterkategorie"], as_index=False)
-            .agg(agg_dict)
-        )
-
-        # Bisherige Logik => Brutto_Ausschuss neu berechnen
+        grouped = df_agg.groupby(["auftrag","unterkategorie"], as_index=False).agg(agg_dict)
         grouped["Brutto_Ausschuss"] = grouped.apply(
             lambda r: round(100 * (r["waste_cbm"] / r["Brutto_Volumen"]),3) if r["Brutto_Volumen"] > 0 else 0,
             axis=1
         )
         grouped["Netto_Volumen"] = grouped["Brutto_Volumen"] - grouped["waste_cbm"]
-
-        def compute_ausbeute(row, colname):
+        def compute_yield(row, colname):
             vol_in_liters = row["Vol_Eingang_m3"]
             if vol_in_liters == 0:
                 return 0
             return (row[colname] / vol_in_liters) * 100
-
-        grouped["Brutto_Ausbeute"] = grouped.apply(lambda r: round(compute_ausbeute(r, "Brutto_Volumen"),3), axis=1)
-        grouped["Netto_Ausbeute"]  = grouped.apply(lambda r: round(compute_ausbeute(r, "Netto_Volumen"),3), axis=1)
-
-        # ---------------------------------------------------------------------
-        # 1) KH I-III + SF I-III + SF I-IV => sf_cbm
-        # ---------------------------------------------------------------------
+        grouped["Brutto_Ausbeute"] = grouped.apply(lambda r: round(compute_yield(r, "Brutto_Volumen"),3), axis=1)
+        grouped["Netto_Ausbeute"] = grouped.apply(lambda r: round(compute_yield(r, "Netto_Volumen"),3), axis=1)
+        # Zusammenfassen der SF-Spalten
         grouped["sf_cbm"] = grouped["kh_i_iii_cbm"] + grouped["sf_i_iii_cbm"] + grouped["sf_i_iiii_cbm"]
         grouped.drop(["kh_i_iii_cbm", "sf_i_iii_cbm", "sf_i_iiii_cbm"], axis=1, inplace=True)
-
-        # ---------------------------------------------------------------------
-        # 2) SI 0-IV + SI I-II => si_cbm
-        # ---------------------------------------------------------------------
+        # Zusammenfassen der SI-Spalten: SI 0-IV + SI I-II -> si_cbm
         grouped["si_cbm"] = grouped["si_0_iv_cbm"] + grouped["si_i_ii_cbm"]
         grouped.drop(["si_0_iv_cbm", "si_i_ii_cbm"], axis=1, inplace=True)
-
-        # Spalten in gewünschter Reihenfolge
         final_cols = [
             "auftrag","unterkategorie","stämme","vol_eingang","durchschn_stammlänge",
             "teile","vol_ausgang","Warentyp","Brutto_Volumen","Brutto_Ausschuss",
             "Netto_Volumen","Brutto_Ausbeute","Netto_Ausbeute",
             "ce_cbm","sf_cbm","si_cbm","ind_ii_iii_cbm","nsi_i_iii_cbm","ass_iv_cbm","waste_cbm"
         ]
-
-        # Falls eine Spalte fehlt, setze sie auf 0
         for col in final_cols:
             if col not in grouped.columns:
                 grouped[col] = 0
         grouped = grouped[final_cols]
-
-        # -----------------------------
-        # Spalten-Umbennung im finalen Output
-        # -----------------------------
+        # Umbenennung der Spalten im finalen Output
         rename_map = {
             "auftrag": "Auftrag",
             "unterkategorie": "Dimension",
@@ -624,6 +561,7 @@ def main_app():
             "vol_eingang": "Volumen_Eingang",
             "durchschn_stammlänge": "Durchschn_Stämme",
             "teile": "Teile",
+            "vol_ausgang": "Volumen_Ausgang",
             "Warentyp": "Typ",
             "Brutto_Volumen": "Brutto_Volumen",
             "Brutto_Ausschuss": "Brutto_Ausschuss",
@@ -639,17 +577,15 @@ def main_app():
             "waste_cbm": "Ausschuss"
         }
         grouped.rename(columns=rename_map, inplace=True)
-
-        st.subheader("Aggregiertes Ergebnis")
+        st.subheader("Finales Ergebnis")
         st.dataframe(grouped)
-
         xlsx_data = to_excel_bytes(grouped)
         st.download_button(
-            label="Download Aggregiertes Ergebnis",
+            label="Download Finales Ergebnis",
             data=xlsx_data,
             file_name=f"Ausbeuteanalyse_{default_date}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
-if __name__=="__main__":
+if __name__ == "__main__":
     main_app()

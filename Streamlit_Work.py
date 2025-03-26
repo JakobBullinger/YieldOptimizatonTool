@@ -15,6 +15,7 @@ if "merged_df" not in st.session_state:
 # 2) Hilfsfunktionen: Synonym, CSV-Funktionen, PDF-Parsing
 ################################################################################
 
+### Feisto : MicroTec Übersetzung
 synonyms = {
     "38x80": "80x80",
     "17x75": "17x78",
@@ -96,7 +97,8 @@ def summarize_cbm_by_classifications(df):
         "CE": "ce_cbm",
         "KH I-III": "kh_i_iii_cbm",
         "SF I-III": "sf_i_iii_cbm",
-        "SF I-IIII": "sf_i_iiii_cbm",
+        "SF I-IV": "sf_i_iiii_cbm",
+        "SI 0-IV": "si_0_iv_cbm",
         "SI I-II": "si_i_ii_cbm",
         "IND II-III": "ind_ii_iii_cbm",
         "NSI I-III": "nsi_i_iii_cbm",
@@ -138,14 +140,14 @@ HW_DIMENSIONS = {
     "43x95","43x138","43x125","43x141","47x92","47x113",
     "47x153","47x154","47x175","47x198","51x104","36x134",
     "48x117","48x128","48x144","48x164","69x122","75x148","75x152",
-    "46x88"
 }
 SW_DIMENSIONS = {
     "17x75","17x78","17x98","17x100","23x103","26x146","28x131","28x149","35x155"
 }
 KH_DIMENSIONS = {
     "56x76","58x78","60x80","60x90","63x80","65x80","68x98","70x75","75x90","75x95",
-    "75x98","76x76","76x96","78x78","78x90","78x100","79x100","93x93","96x116","98x98","33x90"
+    "75x98","76x76","76x96","78x78","78x90","78x100","79x100","93x93","96x116","98x98","33x90",
+    "46x88"
 }
 
 def classify_dimension(dim):
@@ -409,6 +411,7 @@ def main_app():
                 kh_i_iii    = row_["kh_i_iii_cbm"]
                 sf_i_iii    = row_["sf_i_iii_cbm"]
                 sf_i_iiii   = row_["sf_i_iiii_cbm"]
+                si_0_iv     = row_["si_0_iv_cbm"]
                 si_i_ii     = row_["si_i_ii_cbm"]
                 ind_ii_iii  = row_["ind_ii_iii_cbm"]
                 nsi_i_iii   = row_["nsi_i_iii_cbm"]
@@ -437,6 +440,7 @@ def main_app():
                     "kh_i_iii_cbm": kh_i_iii,
                     "sf_i_iii_cbm": sf_i_iii,
                     "sf_i_iiii_cbm": sf_i_iiii,
+                    "si_0_iv_cbm": si_0_iv,
                     "si_i_ii_cbm": si_i_ii,
                     "ind_ii_iii_cbm": ind_ii_iii,
                     "nsi_i_iii_cbm": nsi_i_iii,
@@ -476,15 +480,16 @@ def main_app():
                 row_dict["Warentyp"]         = rowM["Warentyp"]
                 # NEUE Klassifikationen übernehmen
                 row_dict["ce_cbm"]           = rowM["ce_cbm"]
-                row_dict["kh_i_iii_cbm"]      = rowM["kh_i_iii_cbm"]
+                row_dict["kh_i_iii_cbm"]     = rowM["kh_i_iii_cbm"]
                 row_dict["sf_i_iii_cbm"]     = rowM["sf_i_iii_cbm"]
                 row_dict["sf_i_iiii_cbm"]    = rowM["sf_i_iiii_cbm"]
+                row_dict["si_0_iv_cbm"]      = rowM["si_0_iv_cbm"]
                 row_dict["si_i_ii_cbm"]      = rowM["si_i_ii_cbm"]
                 row_dict["ind_ii_iii_cbm"]   = rowM["ind_ii_iii_cbm"]
                 row_dict["nsi_i_iii_cbm"]    = rowM["nsi_i_iii_cbm"]
                 row_dict["ass_iv_cbm"]       = rowM["ass_iv_cbm"]
             else:
-                # Keine passenden MicroTec-Daten gefunden => 0
+                # Keine passenden MicroTec-Daten => 0
                 row_dict["Brutto_Volumen"]   = 0
                 row_dict["waste_cbm"]        = 0
                 row_dict["Netto_Volumen"]    = 0
@@ -497,7 +502,8 @@ def main_app():
                 row_dict["ce_cbm"]           = 0 
                 row_dict["kh_i_iii_cbm"]     = 0 
                 row_dict["sf_i_iii_cbm"]     = 0 
-                row_dict["sf_i_iiii_cbm"]    = 0   
+                row_dict["sf_i_iiii_cbm"]    = 0
+                row_dict["si_0_iv_cbm"]      = 0
                 row_dict["si_i_ii_cbm"]      = 0
                 row_dict["ind_ii_iii_cbm"]   = 0
                 row_dict["nsi_i_iii_cbm"]    = 0
@@ -526,7 +532,7 @@ def main_app():
             "Netto_Ausbeute","Vol_Eingang_m3",
             # NEUE Klassifikationen
             "ce_cbm","kh_i_iii_cbm","sf_i_iii_cbm","sf_i_iiii_cbm",
-            "si_i_ii_cbm","ind_ii_iii_cbm","nsi_i_iii_cbm","ass_iv_cbm","waste_cbm"
+            "si_0_iv_cbm","si_i_ii_cbm","ind_ii_iii_cbm","nsi_i_iii_cbm","ass_iv_cbm","waste_cbm"
         ]
         for c in numeric_cols:
             if c not in df_agg.columns:
@@ -552,6 +558,7 @@ def main_app():
             "kh_i_iii_cbm": "sum",
             "sf_i_iii_cbm": "sum",
             "sf_i_iiii_cbm": "sum",
+            "si_0_iv_cbm": "sum",
             "si_i_ii_cbm": "sum",
             "ind_ii_iii_cbm": "sum",
             "nsi_i_iii_cbm": "sum",
@@ -567,7 +574,7 @@ def main_app():
 
         # Bisherige Logik => Brutto_Ausschuss neu berechnen
         grouped["Brutto_Ausschuss"] = grouped.apply(
-            lambda r: 100 * (r["waste_cbm"] / r["Brutto_Volumen"]) if r["Brutto_Volumen"] > 0 else 0,
+            lambda r: round(100 * (r["waste_cbm"] / r["Brutto_Volumen"]),3) if r["Brutto_Volumen"] > 0 else 0,
             axis=1
         )
         grouped["Netto_Volumen"] = grouped["Brutto_Volumen"] - grouped["waste_cbm"]
@@ -578,25 +585,27 @@ def main_app():
                 return 0
             return (row[colname] / vol_in_liters) * 100
 
-        grouped["Brutto_Ausbeute"] = grouped.apply(lambda r: compute_ausbeute(r, "Brutto_Volumen"), axis=1)
-        grouped["Netto_Ausbeute"]  = grouped.apply(lambda r: compute_ausbeute(r, "Netto_Volumen"), axis=1)
+        grouped["Brutto_Ausbeute"] = grouped.apply(lambda r: round(compute_ausbeute(r, "Brutto_Volumen"),3), axis=1)
+        grouped["Netto_Ausbeute"]  = grouped.apply(lambda r: round(compute_ausbeute(r, "Netto_Volumen"),3), axis=1)
 
         # ---------------------------------------------------------------------
-        # KH I-III + SF I-III + SF I-IIII => sf_cbm
+        # 1) KH I-III + SF I-III + SF I-IV => sf_cbm
         # ---------------------------------------------------------------------
         grouped["sf_cbm"] = grouped["kh_i_iii_cbm"] + grouped["sf_i_iii_cbm"] + grouped["sf_i_iiii_cbm"]
-
-        # Anschließend entfernen wir die Einzelspalten (wenn sie im finalen Output
-        # nicht mehr benötigt werden):
         grouped.drop(["kh_i_iii_cbm", "sf_i_iii_cbm", "sf_i_iiii_cbm"], axis=1, inplace=True)
+
+        # ---------------------------------------------------------------------
+        # 2) SI 0-IV + SI I-II => si_cbm
+        # ---------------------------------------------------------------------
+        grouped["si_cbm"] = grouped["si_0_iv_cbm"] + grouped["si_i_ii_cbm"]
+        grouped.drop(["si_0_iv_cbm", "si_i_ii_cbm"], axis=1, inplace=True)
 
         # Spalten in gewünschter Reihenfolge
         final_cols = [
             "auftrag","unterkategorie","stämme","vol_eingang","durchschn_stammlänge",
             "teile","vol_ausgang","Warentyp","Brutto_Volumen","Brutto_Ausschuss",
             "Netto_Volumen","Brutto_Ausbeute","Netto_Ausbeute",
-            # Noch vorhandene Klassifikations-Spalten
-            "ce_cbm","sf_cbm","si_i_ii_cbm","ind_ii_iii_cbm","nsi_i_iii_cbm","ass_iv_cbm","waste_cbm",            
+            "ce_cbm","sf_cbm","si_cbm","ind_ii_iii_cbm","nsi_i_iii_cbm","ass_iv_cbm","waste_cbm"
         ]
 
         # Falls eine Spalte fehlt, setze sie auf 0
@@ -604,6 +613,32 @@ def main_app():
             if col not in grouped.columns:
                 grouped[col] = 0
         grouped = grouped[final_cols]
+
+        # -----------------------------
+        # Spalten-Umbennung im finalen Output
+        # -----------------------------
+        rename_map = {
+            "auftrag": "Auftrag",
+            "unterkategorie": "Dimension",
+            "stämme": "Stämme",
+            "vol_eingang": "Volumen_Eingang",
+            "durchschn_stammlänge": "Durchschn_Stämme",
+            "teile": "Teile",
+            "Warentyp": "Typ",
+            "Brutto_Volumen": "Brutto_Volumen",
+            "Brutto_Ausschuss": "Brutto_Ausschuss",
+            "Netto_Volumen": "Netto_Volumen",
+            "Brutto_Ausbeute": "Brutto_Ausbeute",
+            "Netto_Ausbeute": "Netto_Ausbeute",
+            "ce_cbm": "CE",
+            "sf_cbm": "SF",
+            "si_cbm": "SI",
+            "ind_ii_iii_cbm": "IND",
+            "nsi_i_iii_cbm": "NSI",
+            "ass_iv_cbm": "Q_V",
+            "waste_cbm": "Ausschuss"
+        }
+        grouped.rename(columns=rename_map, inplace=True)
 
         st.subheader("Aggregiertes Ergebnis")
         st.dataframe(grouped)
