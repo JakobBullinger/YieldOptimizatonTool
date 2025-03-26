@@ -406,7 +406,7 @@ def main_app():
                 brutto_vol  = row_["total_cbm"]
                 waste_vol   = row_["waste_cbm"]
                 ce          = row_["ce_cbm"]
-                kh_i_iii     = row_["kh_i_iii_cbm"]
+                kh_i_iii    = row_["kh_i_iii_cbm"]
                 sf_i_iii    = row_["sf_i_iii_cbm"]
                 sf_i_iiii   = row_["sf_i_iiii_cbm"]
                 si_i_ii     = row_["si_i_ii_cbm"]
@@ -612,7 +612,7 @@ def main_app():
         st.download_button(
             label="Download Aggregiertes Ergebnis",
             data=xlsx_data,
-            file_name=f"Aggregiertes_Ergebnis_{default_date}.xlsx",
+            file_name=f"Ausbeuteanalyse_{default_date}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
