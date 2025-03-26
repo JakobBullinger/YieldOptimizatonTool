@@ -237,7 +237,7 @@ def extract_table_with_suborders_clean(file_input, start_keyword="Auftrag"):
 # 3) Haupt-App: Zwei Buttons (Schritt 5 & Schritt 6)
 ################################################################################
 def main_app():
-    st.title("PDF + MicroTec Auswertung: Doppelte Einträge, neu berechnete Kennzahlen")
+    st.title("Gelo Ausbeuteanalyse")
 
     # -------------------------------------------------------------------------
     # PDF-Upload
@@ -351,7 +351,7 @@ def main_app():
     # -------------------------------------------------------------------------
     # BUTTON (A): Auswerten & Zusammenführen (nicht aggregiert)
     # -------------------------------------------------------------------------
-    if st.button("Auswerten & Zusammenführen (ohne Aggregation)"):
+    if st.button("MicroTec & Feisto: Auswerten & Zusammenführung (ohne Aggregation)"):
         final_rows = []
         for ukey, params in orders_final.items():
             (start_dt, end_dt) = params["time_window"]
@@ -492,7 +492,8 @@ def main_app():
         final_cols = [
             "auftrag","unterkategorie","stämme","vol_eingang","durchschn_stammlänge",
             "teile","vol_ausgang","Warentyp","Brutto_Volumen","Brutto_Ausschuss",
-            "Netto_Volumen","Brutto_Ausbeute","Netto_Ausbeute","Vol_Eingang_m3"
+            "Netto_Volumen","Brutto_Ausbeute","Netto_Ausbeute"
+            #,"Vol_Eingang_m3"
         ]
         for col in final_cols:
             if col not in grouped.columns:
@@ -506,7 +507,7 @@ def main_app():
         st.download_button(
             label="Download Aggregiertes Ergebnis",
             data=xlsx_data,
-            file_name="Aggregiertes_Ergebnis.xlsx",
+            file_name=f"Aggregiertes_Ergebnis_{default_date}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
