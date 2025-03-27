@@ -92,7 +92,6 @@ def summarize_cbm_by_classifications(df):
     für jede gewünschte Klassifizierung. Zusätzlich wird der Anteil für 'Waste'
     als Prozentwert (waste_percent) berechnet.
     """
-    # Alle gewünschten Klassifizierungen, inkl. der neuen "SI 0-IV"
     CLASSIFICATION_MAP = {
         "Waste": "waste_cbm",
         "CE": "ce_cbm",
@@ -131,8 +130,6 @@ def summarize_cbm_by_classifications(df):
 
     return grouped
 
-# Da wir den gesamten Teil zur Klassifizierung der Dimensionen (KH, HW, SW) nicht mehr benötigen,
-# wurde der entsprechende Code entfernt.
 
 # PDF-Parsing
 def extract_table_with_suborders_clean(file_input, start_keyword="Auftrag"):
@@ -245,7 +242,7 @@ def extract_table_with_suborders_clean(file_input, start_keyword="Auftrag"):
     return pd.DataFrame(result_rows)
 
 ################################################################################
-# 3) Haupt-App: Nicht aggregiertes Ergebnis (Schritt 5) und Aggregiertes Ergebnis (Schritt 6)
+# 3) Haupt-App:
 ################################################################################
 def main_app():
     st.title("Gelo Ausbeuteanalyse")
@@ -471,6 +468,7 @@ def main_app():
             "Vol_Eingang_m3": "sum",
             "Brutto_Ausbeute": "mean",
             "Netto_Ausbeute": "mean",
+
             # NEUE Klassifikationen
             "ce_cbm": "sum",
             "kh_i_iii_cbm": "sum",

@@ -15,8 +15,7 @@ if "merged_df" not in st.session_state:
 # 2) Hilfsfunktionen: Synonym, CSV-Funktionen, PDF-Parsing
 ################################################################################
 
-### Feisto : MicroTec Übersetzung
-
+### Feisto: MicroTec Übersetzung
 synonyms = {
     "38x80": "80x80",
     "17x75": "17x78",
@@ -89,16 +88,16 @@ def filter_data_for_order(df, start_dt, end_dt, dimensions):
 def summarize_cbm_by_classifications(df):
     """
     Summiert pro 'Dimension' das Gesamtvolumen (total_cbm) sowie die Teilvolumina
-    für jede gewünschte Klassifizierung. Behält zusätzlich waste_percent bei.
+    für jede gewünschte Klassifizierung. Zusätzlich wird der Anteil für 'Waste'
+    als Prozentwert (waste_percent) berechnet.
     """
-    # Alle gewünschten Klassifizierungen => Spaltennamen (inklusive neuer "SI 0-IV")
     CLASSIFICATION_MAP = {
         "Waste": "waste_cbm",
         "CE": "ce_cbm",
         "KH I-III": "kh_i_iii_cbm",
         "SF I-III": "sf_i_iii_cbm",
         "SF I-IV": "sf_i_iiii_cbm",
-        "SI 0-IV": "si_0_iv_cbm",  # NEU
+        "SI 0-IV": "si_0_iv_cbm",
         "SI I-II": "si_i_ii_cbm",
         "IND II-III": "ind_ii_iii_cbm",
         "NSI I-III": "nsi_i_iii_cbm",
@@ -129,8 +128,6 @@ def summarize_cbm_by_classifications(df):
     grouped['waste_percent'] = grouped['waste_percent'].round(2)
 
     return grouped
-
-# Der gesamte Teil zur Klassifizierung der Dimensionen in KH, HW, SW wurde entfernt.
 
 # PDF-Parsing
 def extract_table_with_suborders_clean(file_input, start_keyword="Auftrag"):
@@ -203,7 +200,6 @@ def extract_table_with_suborders_clean(file_input, start_keyword="Auftrag"):
         line = line.strip()
         if not line:
             continue
-        
         main_match = main_row_pattern.match(line)
         if main_match:
             main_dict = main_match.groupdict()
@@ -248,15 +244,12 @@ def extract_table_with_suborders_clean(file_input, start_keyword="Auftrag"):
 def main_app():
     st.title("Gelo Ausbeuteanalyse")
 
-    # -------------------------------------------------------------------------
     # PDF-Upload
-    # -------------------------------------------------------------------------
     st.markdown("### 1) PDF hochladen")
     pdf_file = st.file_uploader("PDF des Produktivitätsberichts", type=["pdf"])
     df_prod = None
     orders_from_pdf = {}
     auftrag_infos = {}
-
     if pdf_file:
         with st.spinner("Parsing PDF..."):
             df_prod = extract_table_with_suborders_clean(pdf_file)
@@ -290,9 +283,7 @@ def main_app():
                 orders_from_pdf[ukey] = {"dimensions": dims, "auftrag": row_["auftrag"]}
                 auftrag_infos[ukey] = {"vol_eingang": vol_in}
 
-    # -------------------------------------------------------------------------
     # CSV-Upload
-    # -------------------------------------------------------------------------
     st.markdown("### 2) MicroTec CSV hochladen")
     csv_file = st.file_uploader("CSV MicroTec", type=["csv"])
     df_microtec = None
@@ -305,9 +296,7 @@ def main_app():
     if not orders_from_pdf or df_microtec is None:
         st.stop()
 
-    # -------------------------------------------------------------------------
-    # Zeitfenster definieren – chronologische Differenzierung
-    # -------------------------------------------------------------------------
+    # Zeitfenster definieren
     default_date = df_microtec["Datetime"].iloc[0].date()
     st.markdown("### 3) Zeitfenster definieren")
     orders_final = {}
@@ -332,9 +321,7 @@ def main_app():
             return 0
         return (volume / (vol_in_liters / 1000)) * 100
 
-    # -------------------------------------------------------------------------
-    # BUTTON: Auswerten & Aggregieren (Direkt zum finalen Output)
-    # -------------------------------------------------------------------------
+    # Finaler Aggregationsschritt (ohne separaten Zwischenschritt)
     if st.button("Auswerten & Aggregieren"):
         all_rows = []
         for ukey, params in orders_final.items():
@@ -360,7 +347,6 @@ def main_app():
                 netto_vol = brutto_vol - waste_vol
                 brutto_ausb = compute_yield(brutto_vol, vol_in)
                 netto_ausb = compute_yield(netto_vol, vol_in)
-                # Ohne Dimensionseinstufung: Warentyp wird nicht berechnet
                 all_rows.append({
                     "unique_key": ukey,
                     "unterkategorie": dim,
@@ -435,11 +421,9 @@ def main_app():
             merged_rows.append(row_dict)
         merged_df = pd.DataFrame(merged_rows)
         st.session_state["merged_df"] = merged_df
-        st.subheader("Nicht aggregiertes Endergebnis (PDF + MicroTec)")
-        st.dataframe(merged_df)
 
         # Aggregationsschritt
-        df_agg = merged_df.copy()
+        df_agg = st.session_state["merged_df"].copy()
         numeric_cols = [
             "stämme", "vol_eingang", "durchschn_stammlänge", "teile", "vol_ausgang",
             "Brutto_Volumen", "Brutto_Ausschuss", "Netto_Volumen", "Brutto_Ausbeute",
@@ -463,7 +447,6 @@ def main_app():
             "Vol_Eingang_m3": "sum",
             "Brutto_Ausbeute": "mean",
             "Netto_Ausbeute": "mean",
-            # NEUE Klassifikationen
             "ce_cbm": "sum",
             "kh_i_iii_cbm": "sum",
             "sf_i_iii_cbm": "sum",
@@ -506,9 +489,7 @@ def main_app():
             if col not in grouped.columns:
                 grouped[col] = 0
         grouped = grouped[final_cols]
-        # -----------------------------
         # Spalten-Umbennung im finalen Output
-        # -----------------------------
         rename_map = {
             "auftrag": "Auftrag",
             "unterkategorie": "Dimension",
@@ -527,10 +508,20 @@ def main_app():
             "si_cbm": "SI",
             "ind_ii_iii_cbm": "IND",
             "nsi_i_iii_cbm": "NSI",
-            "ass_iv_cbm": "Q",
+            "ass_iv_cbm": "Q_V",
             "waste_cbm": "Ausschuss"
         }
         grouped.rename(columns=rename_map, inplace=True)
+
+        # Final: Transformation der Dimensionen
+        final_dimension_map = {
+            "17x100": "17x98",
+            "23x103": "23x100",
+            "47x221": "47x220",
+            "47x223": "47x220"
+        }
+        grouped["Dimension"] = grouped["Dimension"].replace(final_dimension_map)
+
         st.subheader("Aggregiertes Ergebnis")
         st.dataframe(grouped)
         xlsx_data = to_excel_bytes(grouped)
