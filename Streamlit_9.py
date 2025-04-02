@@ -4,6 +4,7 @@ import pdfplumber
 import re
 from datetime import datetime, time
 import io
+import math
 
 ################################################################################
 # 1) Session-State: Wir wollen "merged_df" zwischen Button-Klicks speichern
@@ -103,11 +104,9 @@ def summarize_cbm_by_classifications(df):
         "NSI I-III": "nsi_i_iii_cbm",
         "ASS IV": "ass_iv_cbm",
     }
-
     grouped = df.groupby('Dimension', dropna=False).agg(
         total_cbm=('CBM', 'sum')
     ).reset_index()
-
     for class_label, col_name in CLASSIFICATION_MAP.items():
         grouped[col_name] = grouped['Dimension'].apply(
             lambda dim: df.loc[
@@ -116,17 +115,14 @@ def summarize_cbm_by_classifications(df):
                 'CBM'
             ].sum()
         )
-
     grouped['waste_percent'] = grouped.apply(
         lambda row: 100 * row['waste_cbm'] / row['total_cbm'] if row['total_cbm'] else 0,
         axis=1
     )
-
     grouped['total_cbm'] = grouped['total_cbm'].round(3)
     for col_name in CLASSIFICATION_MAP.values():
         grouped[col_name] = grouped[col_name].round(3)
     grouped['waste_percent'] = grouped['waste_percent'].round(2)
-
     return grouped
 
 # PDF-Parsing
@@ -137,14 +133,12 @@ def extract_table_with_suborders_clean(file_input, start_keyword="Auftrag"):
             text = page.extract_text()
             if text:
                 full_text += text + "\n"
-    
     start_index = full_text.find(start_keyword)
     if start_index == -1:
         st.error(f"Startkeyword '{start_keyword}' nicht gefunden!")
         return None
     table_text = full_text[start_index:]
     lines = [line.strip() for line in table_text.splitlines() if line.strip()]
-
     main_row_pattern = re.compile(
         r"^(?P<auftrag>\d{5}\s*-\s*.*?)(?=\s+[\d.,]+\s+)"
         r"\s+(?P<stämme>[\d.,]+)\s+"
@@ -159,7 +153,6 @@ def extract_table_with_suborders_clean(file_input, start_keyword="Auftrag"):
         r"(?P<teile>[\d.,]+)\s+"
         r"(?P<vol_ausgang>[\d.,]+)$"
     )
-    
     merged_lines = []
     buffer = ""
     for line in lines:
@@ -173,7 +166,6 @@ def extract_table_with_suborders_clean(file_input, start_keyword="Auftrag"):
                 buffer = ""
             merged_lines.append(line)
             continue
-
         if re.match(r'^\d{5}\s*-\s*', line):
             if buffer:
                 if "Auftrag" in buffer:
@@ -193,7 +185,6 @@ def extract_table_with_suborders_clean(file_input, start_keyword="Auftrag"):
             if m:
                 buffer = buffer[m.start():]
         merged_lines.append(buffer)
-    
     result_rows = []
     current_main_order = None
     for line in merged_lines:
@@ -244,7 +235,7 @@ def extract_table_with_suborders_clean(file_input, start_keyword="Auftrag"):
 def main_app():
     st.title("Gelo Ausbeuteanalyse")
 
-    # PDF-Upload
+    # --- PDF-Upload ---
     st.markdown("### 1) PDF hochladen")
     pdf_file = st.file_uploader("PDF des Produktivitätsberichts", type=["pdf"])
     df_prod = None
@@ -258,10 +249,7 @@ def main_app():
             st.dataframe(df_prod)
             numeric_cols = ["stämme", "vol_eingang", "durchschn_stammlänge", "teile", "vol_ausgang"]
             for c in numeric_cols:
-                df_prod[c] = pd.to_numeric(
-                    df_prod[c].astype(str).str.replace(",", ".").str.strip(),
-                    errors="coerce"
-                )
+                df_prod[c] = pd.to_numeric(df_prod[c].astype(str).str.replace(",", ".").str.strip(), errors="coerce")
             df_prod["unique_key"] = None
             df_main = df_prod[df_prod["unterkategorie"] == ""]
             for i, row in df_main.iterrows():
@@ -283,7 +271,7 @@ def main_app():
                 orders_from_pdf[ukey] = {"dimensions": dims, "auftrag": row_["auftrag"]}
                 auftrag_infos[ukey] = {"vol_eingang": vol_in}
 
-    # CSV-Upload
+    # --- CSV-Upload ---
     st.markdown("### 2) MicroTec CSV hochladen")
     csv_file = st.file_uploader("CSV MicroTec", type=["csv"])
     df_microtec = None
@@ -296,10 +284,12 @@ def main_app():
     if not orders_from_pdf or df_microtec is None:
         st.stop()
 
-    # Zeitfenster definieren
+    # --- Kombinierte Zeiteingabe pro Auftrag ---
+    # Für jeden Auftrag (unique_key) wird nun zuerst die "wirkliche Zeit" (Laufzeit) und
+    # anschließend die "MicroTec-Zeit" abgefragt.
     default_date = df_microtec["Datetime"].iloc[0].date()
-    st.markdown("### 3) Zeitfenster definieren")
-    orders_final = {}
+    st.markdown("### 3) Zeitfenster definieren pro Auftrag")
+    orders_time = {}
     order_instances = {}
     for ukey, info in orders_from_pdf.items():
         order_number = info["auftrag"].split()[0]
@@ -307,26 +297,36 @@ def main_app():
     for order_number, ukey_list in order_instances.items():
         for idx, ukey in enumerate(ukey_list):
             st.markdown(f"#### Auftrag {order_number} – Instanz {idx+1} von {len(ukey_list)}")
+            st.markdown("##### Wirkliche Zeit (Laufzeit)")
             c1, c2 = st.columns(2)
-            sh = c1.number_input(f"Start-Stunde {ukey}", 0, 23, 6, 1)
-            sm = c1.number_input(f"Start-Minute {ukey}", 0, 59, 0, 1)
-            eh = c2.number_input(f"End-Stunde {ukey}", 0, 23, 12, 1)
-            em = c2.number_input(f"End-Minute {ukey}", 0, 59, 0, 1)
-            start_dt = datetime.combine(default_date, time(sh, sm))
-            end_dt = datetime.combine(default_date, time(eh, em))
-            orders_final[ukey] = {"time_window": (start_dt, end_dt), "dimensions": orders_from_pdf[ukey]["dimensions"]}
+            rt_sh = c1.number_input(f"Start-Stunde (Real) {ukey}", 0, 23, 6, 1)
+            rt_sm = c1.number_input(f"Start-Minute (Real) {ukey}", 0, 59, 0, 1)
+            rt_eh = c2.number_input(f"End-Stunde (Real) {ukey}", 0, 23, 12, 1)
+            rt_em = c2.number_input(f"End-Minute (Real) {ukey}", 0, 59, 0, 1)
+            runtime_start = datetime.combine(default_date, time(rt_sh, rt_sm))
+            runtime_end = datetime.combine(default_date, time(rt_eh, rt_em))
+            st.markdown("##### MicroTec Zeit")
+            c3, c4 = st.columns(2)
+            mt_sh = c3.number_input(f"Start-Stunde (MicroTec) {ukey}", 0, 23, 6, 1)
+            mt_sm = c3.number_input(f"Start-Minute (MicroTec) {ukey}", 0, 59, 0, 1)
+            mt_eh = c4.number_input(f"End-Stunde (MicroTec) {ukey}", 0, 23, 12, 1)
+            mt_em = c4.number_input(f"End-Minute (MicroTec) {ukey}", 0, 59, 0, 1)
+            microtec_start = datetime.combine(default_date, time(mt_sh, mt_sm))
+            microtec_end = datetime.combine(default_date, time(mt_eh, mt_em))
+            orders_time[ukey] = {"runtime": (runtime_start, runtime_end), "microtec": (microtec_start, microtec_end)}
 
     def compute_yield(volume, vol_in_liters):
         if vol_in_liters == 0:
             return 0
         return (volume / (vol_in_liters / 1000)) * 100
 
-    # Finaler Aggregationsschritt (ohne separaten Zwischenschritt)
+    # --- Finaler Aggregationsschritt ---
     if st.button("Auswerten & Aggregieren"):
         all_rows = []
-        for ukey, params in orders_final.items():
-            (start_dt, end_dt) = params["time_window"]
-            dims = params["dimensions"]
+        for ukey, times in orders_time.items():
+            microtec_window = times["microtec"]
+            (start_dt, end_dt) = microtec_window
+            dims = orders_from_pdf[ukey]["dimensions"]
             df_filtered = filter_data_for_order(df_microtec, start_dt, end_dt, dims)
             result = summarize_cbm_by_classifications(df_filtered)
             vol_in = auftrag_infos[ukey]["vol_eingang"]
@@ -425,7 +425,7 @@ def main_app():
         # Aggregationsschritt
         df_agg = st.session_state["merged_df"].copy()
         numeric_cols = [
-            "stämme", "vol_eingang", "durchschn_stammlänge", "teile", "vol_ausgang",
+            "stämme", "vol_eingang", "durchschn_stammlänge", "teile",
             "Brutto_Volumen", "Brutto_Ausschuss", "Netto_Volumen", "Brutto_Ausbeute",
             "Netto_Ausbeute", "Vol_Eingang_m3",
             "ce_cbm", "kh_i_iii_cbm", "sf_i_iii_cbm", "sf_i_iiii_cbm",
@@ -440,7 +440,6 @@ def main_app():
             "vol_eingang": "sum",
             "durchschn_stammlänge": "mean",
             "teile": "sum",
-            "vol_ausgang": "sum",
             "Brutto_Volumen": "sum",
             "Brutto_Ausschuss": "mean",
             "Netto_Volumen": "sum",
@@ -458,7 +457,8 @@ def main_app():
             "ass_iv_cbm": "sum",
             "waste_cbm": "sum"
         }
-        grouped = df_agg.groupby(["auftrag", "unterkategorie"], as_index=False).agg(agg_dict)
+        # Gruppiere inklusive unique_key, Auftrag und Unterkategorie
+        grouped = df_agg.groupby(["unique_key", "auftrag", "unterkategorie"], as_index=False).agg(agg_dict)
         grouped["Brutto_Ausschuss"] = grouped.apply(
             lambda r: round(100 * (r["waste_cbm"] / r["Brutto_Volumen"]), 3) if r["Brutto_Volumen"] > 0 else 0,
             axis=1
@@ -480,10 +480,10 @@ def main_app():
         grouped["si_cbm"] = grouped["si_0_iv_cbm"] + grouped["si_i_ii_cbm"]
         grouped.drop(["si_0_iv_cbm", "si_i_ii_cbm"], axis=1, inplace=True)
         final_cols = [
-            "auftrag", "unterkategorie", "stämme", "vol_eingang", "durchschn_stammlänge",
-            "teile", "vol_ausgang", "Brutto_Volumen", "Brutto_Ausschuss",
-            "Netto_Volumen", "Brutto_Ausbeute", "Netto_Ausbeute",
-            "ce_cbm", "sf_cbm", "si_cbm", "ind_ii_iii_cbm", "nsi_i_iii_cbm", "ass_iv_cbm", "waste_cbm"
+            "unique_key", "auftrag", "unterkategorie", "stämme", "vol_eingang",
+            "durchschn_stammlänge", "teile", "Brutto_Volumen", "Brutto_Ausschuss",
+            "Netto_Volumen", "Brutto_Ausbeute", "Netto_Ausbeute", "ce_cbm", "sf_cbm",
+            "si_cbm", "ind_ii_iii_cbm", "nsi_i_iii_cbm", "ass_iv_cbm", "waste_cbm"
         ]
         for col in final_cols:
             if col not in grouped.columns:
@@ -497,7 +497,7 @@ def main_app():
             "vol_eingang": "Volumen_Eingang",
             "durchschn_stammlänge": "Durchschn_Stämme",
             "teile": "Teile",
-            "vol_ausgang": "Volumen_Ausgang",
+            # "vol_ausgang" entfällt und wird durch "Durchmesser" ersetzt
             "Brutto_Volumen": "Brutto_Volumen",
             "Brutto_Ausschuss": "Brutto_Ausschuss",
             "Netto_Volumen": "Netto_Volumen",
@@ -512,15 +512,44 @@ def main_app():
             "waste_cbm": "Ausschuss"
         }
         grouped.rename(columns=rename_map, inplace=True)
+        
+        # Final: Entferne "Volumen_Ausgang" (sollte nicht vorhanden sein) und
+        # füge die Spalte "Durchmesser" und "Laufzeit_Minuten" hinzu.
+        # Beide werden nur in der ersten Zeile jedes Auftrags berechnet.
+        grouped["Durchmesser"] = 0.0
+        grouped["Laufzeit_Minuten"] = 0.0
+        
+        # Hier nutzen wir orders_time für die Laufzeitberechnung
+        for ukey, grp in grouped.groupby("unique_key"):
+            idx = grp.index[0]  # erste Zeile dieser Auftrag-Instanz
+            # Berechne Durchmesser anhand der Werte aus der ersten Zeile:
+            vol_in = grp.loc[idx, "Volumen_Eingang"]
+            durschn = grp.loc[idx, "Durchschn_Stämme"]
+            stamme = grp.loc[idx, "Stämme"]
+            try:
+                diameter = round(math.sqrt(vol_in / (math.pi * durschn * stamme)) * 20000, 2)
+            except Exception:
+                diameter = 0
+            grouped.loc[idx, "Durchmesser"] = diameter
 
-        # Final: Transformation der Dimensionen
-        final_dimension_map = {
-            "17x100": "17x98",
-            "23x103": "23x100",
-            "47x221": "47x220",
-            "47x223": "47x220"
-        }
-        grouped["Dimension"] = grouped["Dimension"].replace(final_dimension_map)
+            # Berechne Laufzeit-Minuten aus dem Realzeitfenster (aus orders_time)
+            if ukey in orders_time:
+                rt_start, rt_end = orders_time[ukey]["runtime"]
+                runtime_minutes = (rt_end - rt_start).total_seconds() / 60
+            else:
+                runtime_minutes = 0
+            grouped.loc[idx, "Laufzeit_Minuten"] = round(runtime_minutes, 2)
+
+        # Entferne die Spalte "unique_key" für den finalen Output
+        grouped.drop("unique_key", axis=1, inplace=True)
+        
+        final_output_cols = [
+            "Auftrag", "Dimension", "Stämme", "Volumen_Eingang", "Durchschn_Stämme",
+            "Teile", "Durchmesser", "Laufzeit_Minuten", "Brutto_Volumen", "Brutto_Ausschuss",
+            "Netto_Volumen", "Brutto_Ausbeute", "Netto_Ausbeute", "CE", "SF", "SI",
+            "IND", "NSI", "Q_V", "Ausschuss"
+        ]
+        grouped = grouped[final_output_cols]
 
         st.subheader("Aggregiertes Ergebnis")
         st.dataframe(grouped)
