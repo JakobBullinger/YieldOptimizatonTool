@@ -102,7 +102,7 @@ def summarize_cbm_by_classifications(df):
         "SI 0-IV": "si_0_iv_cbm",
         "SI I-II": "si_i_ii_cbm",
         "IND II-III": "ind_ii_iii_cbm",
-        "NSI I-III": "nsi_i_iii_cbm",
+        " NSI I-III": "nsi_i_iii_cbm",
         "ASS IV": "ass_iv_cbm",
     }
     grouped = df.groupby('Dimension', dropna=False).agg(
