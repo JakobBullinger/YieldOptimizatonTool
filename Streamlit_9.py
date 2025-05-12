@@ -24,7 +24,7 @@ synonyms = {
     "17x95": "17x100",
     "23x100": "23x103",
     "47x220": "47x223",
-    "47x221": "47x223" 
+    "47x221": "47x222",          #Neue Kiefer Dimension 47x223 oder 47x222??
 }
 
 def unify_dimension(dim_str):
