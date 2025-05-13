@@ -28,6 +28,7 @@ synonyms = {
     "23x100": "23x103",
     "47x220": "47x223",
     "47x221": "47x222",
+    "23x120": "23x122"
 }
 
 def unify_dimension(dim_str):
